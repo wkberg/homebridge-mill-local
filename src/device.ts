@@ -70,25 +70,58 @@ export default class MillDevice implements IDevice {
   }
 
   async update() {
-    try {
-      const { mac_address, status } = await this._get<StatusResponse>('status');
-      const {
-        ambient_temperature,
-        current_power,
-        set_temperature,
-        operation_mode,
-      } = await this._get<ControlStatusResponse>('control-status');
+  try {
+    // Fetch status
+    const statusResRaw = await fetch(`http://${this._ip}/status`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
 
-      this._mac = mac_address;
-      this._status = status;
-      this._mode = operation_mode;
-      this._currentTemperature = ambient_temperature;
-      this._targetTemperature = set_temperature;
-      this._currentPower = current_power;
-    } catch(ex) {
-      this.log.error(`Failed to fetch data from ${this._name}`);
+    if (!statusResRaw.ok) {
+      throw new Error(`Status endpoint returned HTTP ${statusResRaw.status}`);
     }
+
+    const statusRes = await statusResRaw.json();
+    this.log.info(`Status response from ${this._name}:`, statusRes);
+
+    // Validate required fields
+    if (!statusRes.mac_address || !statusRes.status) {
+      throw new Error('Missing required fields in status response');
+    }
+
+    // Fetch control-status
+    const controlResRaw = await fetch(`http://${this._ip}/control-status`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!controlResRaw.ok) {
+      throw new Error(`Control-status endpoint returned HTTP ${controlResRaw.status}`);
+    }
+
+    const controlRes = await controlResRaw.json();
+    this.log.info(`Control response from ${this._name}:`, controlRes);
+
+    // Validate required fields
+    const requiredFields = ['ambient_temperature', 'current_power', 'set_temperature', 'operation_mode'];
+    for (const field of requiredFields) {
+      if (!(field in controlRes)) {
+        throw new Error(`Missing field '${field}' in control-status response`);
+      }
+    }
+
+    // Update internal state
+    this._mac = statusRes.mac_address;
+    this._status = statusRes.status;
+    this._mode = controlRes.operation_mode;
+    this._currentTemperature = controlRes.ambient_temperature;
+    this._targetTemperature = controlRes.set_temperature;
+    this._currentPower = controlRes.current_power;
+
+  } catch (ex) {
+    this.log.error(`Failed to fetch data from ${this._name}:`, ex);
   }
+}
 
   setTargetTemperature(target: number) {
     this._post<SimpleResponse>('set-temperature', {
