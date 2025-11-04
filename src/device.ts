@@ -71,53 +71,18 @@ export default class MillDevice implements IDevice {
 
   async update() {
   try {
-    this.log.debug(`Fetching status from http://${this._ip}/status`);
-    const statusResRaw = await fetch(`http://${this._ip}/status`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const statusRes = await this._get<StatusResponse>('status');
+    this._mac = statusRes.mac_address ?? this._mac;
+    this._status = statusRes.status ?? this._status;
 
-    if (!statusResRaw.ok) {
-      throw new Error(`Status endpoint returned HTTP ${statusResRaw.status}`);
-    }
-
-    const statusRes = await statusResRaw.json();
-    this.log.info(`Status response from ${this._name}: ${JSON.stringify(statusRes)}`);
-
-    if (!statusRes.mac_address || !statusRes.status) {
-      throw new Error('Missing required fields in status response');
-    }
-
-    this.log.debug(`Fetching control-status from http://${this._ip}/control-status`);
-    const controlResRaw = await fetch(`http://${this._ip}/control-status`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (!controlResRaw.ok) {
-      throw new Error(`Control-status endpoint returned HTTP ${controlResRaw.status}`);
-    }
-
-    const controlRes = await controlResRaw.json();
-    this.log.info(`Control response from ${this._name}: ${JSON.stringify(controlRes)}`);
-
-    const requiredFields = ['ambient_temperature', 'current_power', 'set_temperature', 'operation_mode'];
-    for (const field of requiredFields) {
-      if (!(field in controlRes)) {
-        throw new Error(`Missing field '${field}' in control-status response`);
-      }
-    }
-
-    this._mac = statusRes.mac_address;
-    this._status = statusRes.status;
-    this._mode = controlRes.operation_mode;
-    this._currentTemperature = controlRes.ambient_temperature;
-    this._targetTemperature = controlRes.set_temperature;
-    this._currentPower = controlRes.current_power;
-
+    const controlRes = await this._get<ControlStatusResponse>('control-status');
+    this._mode = controlRes.operation_mode ?? this._mode;
+    this._currentTemperature = controlRes.ambient_temperature ?? this._currentTemperature;
+    this._targetTemperature = controlRes.set_temperature ?? this._targetTemperature;
+    this._currentPower = controlRes.current_power ?? this._currentPower;
   } catch (ex) {
-    this.log.error(`Failed to fetch data from ${this._name}: ${ex instanceof Error ? ex.message : ex}`);
-    this.log.debug(ex); // full object for deeper inspection
+    this.log.error(`Failed to fetch data from ${this._name}:`, ex instanceof Error ? ex.message : ex);
+    // don’t throw → keep old values instead of failing completely
   }
 }
 
