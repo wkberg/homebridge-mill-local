@@ -28,7 +28,20 @@ export class MillPlatformAccessory {
       accessory.context.device.Name,
     );
     
+    // Make sure only HEAT/AUTO/OFF modes are available, disable cooling completely
+this.service
+  .getCharacteristic(Characteristic.TargetHeaterCoolerState)
+  .setProps({
+    validValues: [
+      Characteristic.TargetHeaterCoolerState.HEAT,
+      Characteristic.TargetHeaterCoolerState.AUTO,
+      Characteristic.TargetHeaterCoolerState.OFF,
+    ],
+  });
+    
     const { Characteristic } = this.platform;
+    
+    
 
 // Force heater-only mode
 this.service
@@ -97,17 +110,24 @@ this.service.setCharacteristic(
       
   }
 
-  async handleActiveGet(): Promise<CharacteristicValue> {
-    const isActive = this.device.On;
+async handleActiveGet(): Promise<CharacteristicValue> {
+  const isActive =
+    this.device.Mode === 'Control individually'
+      ? this.platform.Characteristic.Active.ACTIVE
+      : this.platform.Characteristic.Active.INACTIVE;
 
-    this.platform.log.debug('Get Characteristic Active ->', isActive);
+  this.platform.log.debug('Get Characteristic Active ->', isActive);
+  return isActive;
+}
 
-    return isActive;
-  }
+async handleActiveSet(value: CharacteristicValue) {
+  const isTurningOn =
+    value === this.platform.Characteristic.Active.ACTIVE;
 
- async handleActiveSet(value: CharacteristicValue) {
-  await this.device.setOn(value as boolean);
-  this.platform.log.debug('Set Characteristic Active ->', value);
+  const newMode = isTurningOn ? 'Control individually' : 'Schedule';
+  await this.device.setMode(newMode);
+
+  this.platform.log.debug('Set Characteristic Active ->', newMode);
 }
 
   async handleCurrentHeaterCoolerStateGet(): Promise<CharacteristicValue> {
@@ -135,22 +155,48 @@ this.service.setCharacteristic(
     return currentState;
   }
 
-  async handleTargetHeaterCoolerStateGet(): Promise<CharacteristicValue> {
-    const State = {
-      AUTO: this.platform.Characteristic.TargetHeaterCoolerState.AUTO,
-      HEAT: this.platform.Characteristic.TargetHeaterCoolerState.HEAT,
-    };
-    const currentState = State.HEAT;
+async handleTargetHeaterCoolerStateGet(): Promise<CharacteristicValue> {
+  const { TargetHeaterCoolerState } = this.platform.Characteristic;
 
-    this.platform.log.debug(`Get TargetHeaterCoolerState ${currentState}`);
+  // Map device mode to HomeKit state
+  switch (this.device.Mode) {
+    case 'Control individually':
+      return TargetHeaterCoolerState.HEAT;
+    case 'Schedule':
+      return TargetHeaterCoolerState.AUTO;
+    case 'OFF':
+    default:
+      return TargetHeaterCoolerState.OFF;
+  }
+}
 
-    return currentState;
+async handleTargetHeaterCoolerStateSet(value: CharacteristicValue) {
+  const { TargetHeaterCoolerState } = this.platform.Characteristic;
+  let newMode: 'Control individually' | 'Schedule' | 'OFF' = 'OFF';
+
+  switch (value) {
+    case TargetHeaterCoolerState.HEAT:
+      newMode = 'Control individually';
+      break;
+    case TargetHeaterCoolerState.AUTO:
+      newMode = 'Schedule';
+      break;
+    case TargetHeaterCoolerState.OFF:
+      newMode = 'OFF';
+      break;
   }
 
-  async handleTargetHeaterCoolerStateSet(value: CharacteristicValue) {
-    // There is no auto in this case..
-    this.platform.log.debug(`Set TargetHeaterCoolerState ${value}`);
-  }
+  this.platform.log.debug(`Changing mode -> ${newMode}`);
+  await this.device.setMode(newMode);
+
+  // Update the Active characteristic to reflect ON/OFF properly
+  this.service.updateCharacteristic(
+    this.platform.Characteristic.Active,
+    newMode === 'Control individually'
+      ? this.platform.Characteristic.Active.ACTIVE
+      : this.platform.Characteristic.Active.INACTIVE,
+  );
+}
 
   async handleCurrentTemperatureGet(): Promise<CharacteristicValue> {
     await this.device.update();

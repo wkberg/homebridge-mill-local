@@ -1,15 +1,15 @@
 {
-  "displayName": "Mill local",
+  "displayName": "Mill local Custom",
   "name": "homebridge-mill-local",
   "version": "0.0.3",
   "description": "Homebridge local connection to Mill heaters",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/aevare/homebridge-mill-local.git"
+    "url": "https://github.com/wkberg/homebridge-mill-local.git"
   },
   "bugs": {
-    "url": "https://github.com/aevare/homebridge-mill-local/issues"
+    "url": "https://github.com/wkberg/homebridge-mill-local/issues"
   },
   "engines": {
     "node": "^18.17.0 || ^20.9.0",
