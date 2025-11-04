@@ -25,7 +25,7 @@ export class MillPlatformAccessory {
 
     this.service.setCharacteristic(
       Characteristic.Name,
-      accessory.context.device.Name,
+      this.device.Name,
     );
     
     // Make sure only HEAT/AUTO/OFF modes are available, disable cooling completely
