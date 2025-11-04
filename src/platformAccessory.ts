@@ -51,6 +51,36 @@ export class MillPlatformAccessory {
       .getCharacteristic(Characteristic.HeatingThresholdTemperature)
       .onGet(this.handleHeatingThresholdTemperatureGet.bind(this))
       .onSet(this.hadleHeatingThresholdTemperatureSet.bind(this));
+      // 🔁 Periodically refresh the device state and update HomeKit
+      setInterval(async () => {
+  try {
+    await this.device.update();
+
+    this.service.updateCharacteristic(
+      this.platform.Characteristic.Active,
+      this.device.On,
+    );
+
+    this.service.updateCharacteristic(
+      this.platform.Characteristic.CurrentHeaterCoolerState,
+      this.device.isHeating
+        ? this.platform.Characteristic.CurrentHeaterCoolerState.HEATING
+        : this.platform.Characteristic.CurrentHeaterCoolerState.INACTIVE,
+    );
+
+    this.service.updateCharacteristic(
+      this.platform.Characteristic.CurrentTemperature,
+      this.device.CurrentTemperature,
+    );
+    this.service.updateCharacteristic(
+        this.platform.Characteristic.HeatingThresholdTemperature,
+        this.device.TargetTemperature,
+        );
+    } catch (err) {
+        this.platform.log.error(`Polling failed for ${this.device.Name}:`, err);
+        }
+    }, 30 * 1000); // every 30 seconds
+      
   }
 
   async handleActiveGet(): Promise<CharacteristicValue> {
@@ -61,11 +91,10 @@ export class MillPlatformAccessory {
     return isActive;
   }
 
-  async handleActiveSet(value: CharacteristicValue) {
-    this.device.setOn(value as boolean);
-
-    this.platform.log.debug('Set Characteristic Active ->', value);
-  }
+ async handleActiveSet(value: CharacteristicValue) {
+  await this.device.setOn(value as boolean);
+  this.platform.log.debug('Set Characteristic Active ->', value);
+}
 
   async handleCurrentHeaterCoolerStateGet(): Promise<CharacteristicValue> {
     await this.device.update();
