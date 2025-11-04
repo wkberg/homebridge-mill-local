@@ -39,8 +39,6 @@ this.service
     ],
   });
     
-    const { Characteristic } = this.platform;
-    
     
 
 // Force heater-only mode
