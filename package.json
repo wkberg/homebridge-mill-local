@@ -1,7 +1,7 @@
 {
   "displayName": "Mill local Custom",
   "name": "homebridge-mill-local",
-  "version": "0.0.3",
+  "version": "1.0.1",
   "description": "Homebridge local connection to Mill heaters",
   "license": "Apache-2.0",
   "repository": {
