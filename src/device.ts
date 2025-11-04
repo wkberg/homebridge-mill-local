@@ -71,7 +71,7 @@ export default class MillDevice implements IDevice {
 
   async update() {
   try {
-    // Fetch status
+    this.log.debug(`Fetching status from http://${this._ip}/status`);
     const statusResRaw = await fetch(`http://${this._ip}/status`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -82,14 +82,13 @@ export default class MillDevice implements IDevice {
     }
 
     const statusRes = await statusResRaw.json();
-    this.log.info(`Status response from ${this._name}:`, statusRes);
+    this.log.info(`Status response from ${this._name}: ${JSON.stringify(statusRes)}`);
 
-    // Validate required fields
     if (!statusRes.mac_address || !statusRes.status) {
       throw new Error('Missing required fields in status response');
     }
 
-    // Fetch control-status
+    this.log.debug(`Fetching control-status from http://${this._ip}/control-status`);
     const controlResRaw = await fetch(`http://${this._ip}/control-status`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -100,9 +99,8 @@ export default class MillDevice implements IDevice {
     }
 
     const controlRes = await controlResRaw.json();
-    this.log.info(`Control response from ${this._name}:`, controlRes);
+    this.log.info(`Control response from ${this._name}: ${JSON.stringify(controlRes)}`);
 
-    // Validate required fields
     const requiredFields = ['ambient_temperature', 'current_power', 'set_temperature', 'operation_mode'];
     for (const field of requiredFields) {
       if (!(field in controlRes)) {
@@ -110,7 +108,6 @@ export default class MillDevice implements IDevice {
       }
     }
 
-    // Update internal state
     this._mac = statusRes.mac_address;
     this._status = statusRes.status;
     this._mode = controlRes.operation_mode;
@@ -119,7 +116,8 @@ export default class MillDevice implements IDevice {
     this._currentPower = controlRes.current_power;
 
   } catch (ex) {
-    this.log.error(`Failed to fetch data from ${this._name}:`, ex);
+    this.log.error(`Failed to fetch data from ${this._name}: ${ex instanceof Error ? ex.message : ex}`);
+    this.log.debug(ex); // full object for deeper inspection
   }
 }
 
