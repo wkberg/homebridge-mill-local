@@ -89,7 +89,7 @@ export class MillLocalPlatform implements DynamicPlatformPlugin {
         this.log.info('Adding new accessory:', device.Name);
 
         // create a new accessory
-        const accessory = new this.api.platformAccessory(device.Name, uuid);
+        const accessory = new this.api.platformAccessory(device.Name, uuid, this.api.hap.Categories.HEATER);
 
         // store a copy of the device object in the `accessory.context`
         // the `context` property can be used to store any data about the accessory you may need

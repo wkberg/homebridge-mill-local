@@ -27,6 +27,20 @@ export class MillPlatformAccessory {
       Characteristic.Name,
       accessory.context.device.Name,
     );
+    
+    const { Characteristic } = this.platform;
+
+// Force heater-only mode
+this.service
+  .getCharacteristic(Characteristic.TargetHeaterCoolerState)
+  .setProps({
+    validValues: [Characteristic.TargetHeaterCoolerState.HEAT],
+  });
+
+this.service.setCharacteristic(
+  Characteristic.TargetHeaterCoolerState,
+  Characteristic.TargetHeaterCoolerState.HEAT,
+);
 
     // create handlers for required characteristics
     this.service
