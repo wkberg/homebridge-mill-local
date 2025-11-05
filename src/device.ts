@@ -65,9 +65,11 @@ export default class MillDevice implements IDevice {
     this.log.info(`Setting up device ${this._name}`);
   }
 
-  async init() {
-    await this.update();
-  }
+  try {
+  await this.update();
+} catch {
+  this.log.warn(`Update after setMode failed, keeping last known state`);
+}
 
   async update() {
   try {
