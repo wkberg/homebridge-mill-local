@@ -32,7 +32,7 @@ export class MillLocalPlatformAccessory {
       .setProps({
         validValues: [
           Characteristic.TargetHeaterCoolerState.HEAT,
-     //     Characteristic.TargetHeaterCoolerState.AUTO,
+          Characteristic.TargetHeaterCoolerState.AUTO,
         ],
       });
 
@@ -60,13 +60,13 @@ export class MillLocalPlatformAccessory {
       .getCharacteristic(Characteristic.HeatingThresholdTemperature)
       .setProps({ minValue: 5, maxValue: 35, minStep: 0.5 });
 
-// --- Mode Switch Service ---
+// --- Mode Switch Service (NEW) ---
 this.modeSwitchService =
-  this.accessory.getService('Manual Mode') ||
+  this.accessory.getService('Mode') ||
   this.accessory.addService(
     Service.Switch,
-    'Manual Mode',       // name in HomeKit
-    'manual-mode-switch' // unique subtype
+    'Manual Mode',      // name displayed in HomeKit
+    'manual-mode-switch' // UNIQUE subtype
   );
 
 this.modeSwitchService
@@ -74,7 +74,7 @@ this.modeSwitchService
   .onGet(() => this.device.Mode === 'ON')
   .onSet(async (value: CharacteristicValue) => {
     const newMode: 'ON' | 'SCHEDULED' = value ? 'ON' : 'SCHEDULED';
-    this.platform.log.debug(`[${this.device.Name}] Manual Mode Switch → ${newMode}`);
+    this.platform.log.debug(`[${this.device.Name}] Mode Switch → ${newMode}`);
     await this.device.setMode(newMode);
   });
 
