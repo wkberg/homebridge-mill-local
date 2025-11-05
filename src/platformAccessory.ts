@@ -183,3 +183,4 @@ private async updateFromDevice() {
     );
   }
 }
+}
