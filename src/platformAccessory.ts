@@ -3,7 +3,8 @@ import { MillLocalPlatform } from './platform';
 import { IDevice } from './device';
 
 export class MillLocalPlatformAccessory {
-  private service: Service;
+  private heaterService: Service;
+  private autoSwitchService: Service;
 
   constructor(
     private readonly platform: MillLocalPlatform,
@@ -12,22 +13,21 @@ export class MillLocalPlatformAccessory {
   ) {
     const { Characteristic, Service } = this.platform;
 
-    // Set accessory info
+    // --- Accessory info ---
     this.accessory
       .getService(Service.AccessoryInformation)!
       .setCharacteristic(Characteristic.Manufacturer, 'Mill')
       .setCharacteristic(Characteristic.Model, 'Mill Heater Gen3 Panel')
       .setCharacteristic(Characteristic.SerialNumber, this.device.ID);
 
-    // Use HeaterCooler service but only for heating
-    this.service =
+    // --- HeaterCooler service for manual control ---
+    this.heaterService =
       this.accessory.getService(Service.HeaterCooler) ||
       this.accessory.addService(Service.HeaterCooler);
 
-    this.service.setCharacteristic(Characteristic.Name, this.device.Name);
+    this.heaterService.setCharacteristic(Characteristic.Name, this.device.Name);
 
-    // Restrict to only HEAT + AUTO (no COOL)
-    this.service
+    this.heaterService
       .getCharacteristic(Characteristic.TargetHeaterCoolerState)
       .setProps({
         validValues: [
@@ -36,101 +36,87 @@ export class MillLocalPlatformAccessory {
         ],
       });
 
-    // --- Characteristic Handlers ---
-
-    this.service
+    this.heaterService
       .getCharacteristic(Characteristic.Active)
       .onGet(this.handleGetActive.bind(this))
       .onSet(this.handleSetActive.bind(this));
 
-    this.service
+    this.heaterService
       .getCharacteristic(Characteristic.TargetHeaterCoolerState)
       .onGet(this.handleGetTargetState.bind(this))
       .onSet(this.handleSetTargetState.bind(this));
 
-    this.service
+    this.heaterService
       .getCharacteristic(Characteristic.CurrentTemperature)
       .onGet(this.handleGetCurrentTemperature.bind(this));
 
-    this.service
+    this.heaterService
       .getCharacteristic(Characteristic.HeatingThresholdTemperature)
       .onGet(this.handleGetTargetTemperature.bind(this))
       .onSet(this.handleSetTargetTemperature.bind(this));
 
-    this.service
-      .getCharacteristic(Characteristic.CurrentHeaterCoolerState)
-      .onGet(this.handleGetCurrentHeaterCoolerState.bind(this));
-
-    this.service
+    this.heaterService
       .getCharacteristic(Characteristic.HeatingThresholdTemperature)
-      .setProps({ minValue: 5, maxValue: 35, minStep: 0.5 });
+      .setProps({
+        minValue: 5,
+        maxValue: 35,
+        minStep: 0.5,
+      });
 
-    // Periodically update
+    // --- Automatic / Weekly Program switch ---
+    this.autoSwitchService =
+      this.accessory.getServiceById(Service.Switch, 'autoMode') ||
+      this.accessory.addService(Service.Switch, 'Automatic Mode', 'autoMode');
+
+    this.autoSwitchService.setCharacteristic(Characteristic.Name, 'Automatic Mode');
+
+    this.autoSwitchService
+      .getCharacteristic(Characteristic.On)
+      .onGet(() => this.device.Mode === 'SCHEDULED')
+      .onSet(async (value: CharacteristicValue) => {
+        const newMode = value ? 'SCHEDULED' : 'ON';
+        this.platform.log.debug(`[${this.device.Name}] SET Automatic Mode → ${newMode}`);
+        await this.device.setMode(newMode);
+        // Update HeaterCooler UI
+        this.updateFromDevice();
+      });
+
+    // --- Periodic update ---
     setInterval(() => this.updateFromDevice(), 30000);
   }
 
-  // 🔥 Characteristic Handlers
+  // --- HeaterCooler handlers ---
   async handleGetActive(): Promise<CharacteristicValue> {
-    return this.device.Mode !== 'OFF' ? 1 : 0;
-  }
+  // Active = 1 if the device is ON or in SCHEDULED mode
+  const active = this.device.Mode !== 'OFF';
+  return active ? 1 : 0;
+}
 
   async handleSetActive(value: CharacteristicValue) {
-    const isActive = value === 1;
+  const isActive = value === 1;
 
-    if (!isActive) {
-      await this.device.setMode('OFF');
-      this.platform.log.debug(`[${this.device.Name}] SET Active → OFF`);
-    } else {
-      // Do nothing: turning Active on should not force Scheduled/Manual
-      this.platform.log.debug(`[${this.device.Name}] Active turned ON — keep current mode`);
-    }
+  // Only set OFF if turning completely off
+  if (!isActive) {
+    await this.device.setMode('OFF');
+    this.platform.log.debug(`[${this.device.Name}] SET Active → OFF`);
+  } else {
+    // Do nothing: turning Active on should not force SCHEDULED
+    // The user changes modes via TargetState instead
+    this.platform.log.debug(`[${this.device.Name}] Active turned ON — keep current mode`);
   }
+}
 
   async handleGetTargetState(): Promise<CharacteristicValue> {
     const { Characteristic } = this.platform;
-
-    switch (this.device.Mode) {
-      case 'ON':
-        return Characteristic.TargetHeaterCoolerState.HEAT;
-      case 'SCHEDULED':
-        return Characteristic.TargetHeaterCoolerState.AUTO;
-      case 'OFF':
-      default:
-        return Characteristic.TargetHeaterCoolerState.HEAT;
-    }
+    return this.device.Mode === 'SCHEDULED'
+      ? Characteristic.TargetHeaterCoolerState.AUTO
+      : Characteristic.TargetHeaterCoolerState.HEAT;
   }
 
   async handleSetTargetState(value: CharacteristicValue) {
     const { Characteristic } = this.platform;
-    let newMode: 'ON' | 'SCHEDULED' | 'OFF';
-
-    switch (value) {
-      case Characteristic.TargetHeaterCoolerState.HEAT:
-        newMode = 'ON';
-        break;
-      case Characteristic.TargetHeaterCoolerState.AUTO:
-        newMode = 'SCHEDULED';
-        break;
-      default:
-        newMode = 'OFF';
-    }
-
-    this.platform.log.debug(`[${this.device.Name}] SET TargetState → ${newMode}`);
+    const newMode = value === Characteristic.TargetHeaterCoolerState.AUTO ? 'SCHEDULED' : 'ON';
     await this.device.setMode(newMode);
-  }
-
-  async handleGetCurrentHeaterCoolerState(): Promise<CharacteristicValue> {
-    const { Characteristic } = this.platform;
-
-    switch (this.device.Mode) {
-      case 'ON':
-        return Characteristic.CurrentHeaterCoolerState.HEATING;
-      case 'SCHEDULED':
-        return Characteristic.CurrentHeaterCoolerState.IDLE;
-      case 'OFF':
-      default:
-        return Characteristic.CurrentHeaterCoolerState.INACTIVE;
-    }
   }
 
   async handleGetCurrentTemperature(): Promise<CharacteristicValue> {
@@ -142,49 +128,42 @@ export class MillLocalPlatformAccessory {
   }
 
   async handleSetTargetTemperature(value: CharacteristicValue) {
-    const temp = value as number;
-    await this.device.setTargetTemperature(temp);
+    await this.device.setTargetTemperature(value as number);
   }
 
-  // 🔁 Periodic sync from device
+  // --- Periodic sync ---
   private async updateFromDevice() {
     try {
       await this.device.update();
       const { Characteristic } = this.platform;
 
-      this.service.updateCharacteristic(
+      // HeaterCooler UI
+      this.heaterService.updateCharacteristic(
         Characteristic.Active,
         this.device.Mode !== 'OFF' ? 1 : 0,
       );
-
-      const newTargetState =
+      this.heaterService.updateCharacteristic(
+        Characteristic.TargetHeaterCoolerState,
         this.device.Mode === 'SCHEDULED'
           ? Characteristic.TargetHeaterCoolerState.AUTO
-          : Characteristic.TargetHeaterCoolerState.HEAT;
-
-      this.service.updateCharacteristic(
-        Characteristic.TargetHeaterCoolerState,
-        newTargetState,
+          : Characteristic.TargetHeaterCoolerState.HEAT,
       );
-
-      this.service.updateCharacteristic(
-        Characteristic.CurrentHeaterCoolerState,
-        await this.handleGetCurrentHeaterCoolerState(),
-      );
-
-      this.service.updateCharacteristic(
+      this.heaterService.updateCharacteristic(
         Characteristic.CurrentTemperature,
         this.device.CurrentTemperature,
       );
-
-      this.service.updateCharacteristic(
+      this.heaterService.updateCharacteristic(
         Characteristic.HeatingThresholdTemperature,
         this.device.TargetTemperature,
       );
-    } catch (err) {
-      this.platform.log.warn(
-        `[${this.device.Name}] Failed to update device: ${(err as Error).message}`,
+
+      // Automatic Mode switch
+      this.autoSwitchService.updateCharacteristic(
+        Characteristic.On,
+        this.device.Mode === 'SCHEDULED',
       );
+    } catch (err) {
+      this.platform.log.warn(`[${this.device.Name}] Failed to update: ${(err as Error).message}`);
     }
   }
 }
