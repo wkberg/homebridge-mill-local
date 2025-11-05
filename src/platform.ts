@@ -9,7 +9,7 @@ import {
 } from 'homebridge';
 
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
-import { MillPlatformAccessory } from './platformAccessory';
+import { MillLocalPlatformAccessory } from './platformAccessory';
 import MillDevice from './device';
 
 export interface MillLocalConfig extends PlatformConfig {

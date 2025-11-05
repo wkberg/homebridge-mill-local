@@ -1,9 +1,8 @@
 import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
+import { MillLocalPlatform } from './platform';
 import { IDevice } from './device';
 
-import { MillLocalPlatform } from './platform';
-
-export class MillPlatformAccessory {
+export class MillLocalPlatformAccessory {
   private service: Service;
 
   constructor(
@@ -11,220 +10,177 @@ export class MillPlatformAccessory {
     private readonly accessory: PlatformAccessory,
     private readonly device: IDevice,
   ) {
-    const { Characteristic } = this.platform;
-    // set accessory information
+    const { Characteristic, Service } = this.platform;
+
+    // Set accessory info
     this.accessory
-      .getService(this.platform.Service.AccessoryInformation)!
-      .setCharacteristic(Characteristic.Manufacturer, 'mill')
-      .setCharacteristic(Characteristic.Model, 'Mill HeaterGen3Panel')
+      .getService(Service.AccessoryInformation)!
+      .setCharacteristic(Characteristic.Manufacturer, 'Mill')
+      .setCharacteristic(Characteristic.Model, 'Mill Heater Gen3 Panel')
       .setCharacteristic(Characteristic.SerialNumber, this.device.ID);
 
+    // Use HeaterCooler service but only for heating
     this.service =
-      this.accessory.getService(this.platform.Service.HeaterCooler) ||
-      this.accessory.addService(this.platform.Service.HeaterCooler);
+      this.accessory.getService(Service.HeaterCooler) ||
+      this.accessory.addService(Service.HeaterCooler);
 
-    this.service.setCharacteristic(
-      Characteristic.Name,
-      this.device.Name,
-    );
-    
-    // Make sure only HEAT/AUTO/OFF modes are available, disable cooling completely
-this.service
-  .getCharacteristic(Characteristic.TargetHeaterCoolerState)
-  .setProps({
-    validValues: [
-      Characteristic.TargetHeaterCoolerState.HEAT,
-      Characteristic.TargetHeaterCoolerState.AUTO,
-      Characteristic.TargetHeaterCoolerState.OFF,
-    ],
-  });
-    
-    
+    this.service.setCharacteristic(Characteristic.Name, this.device.Name);
 
-// Force heater-only mode
-this.service
-  .getCharacteristic(Characteristic.TargetHeaterCoolerState)
-  .setProps({
-    validValues: [Characteristic.TargetHeaterCoolerState.HEAT],
-  });
-
-this.service.setCharacteristic(
-  Characteristic.TargetHeaterCoolerState,
-  Characteristic.TargetHeaterCoolerState.HEAT,
-);
-
-    // create handlers for required characteristics
-    this.service
-      .getCharacteristic(Characteristic.Active)
-      .onGet(this.handleActiveGet.bind(this))
-      .onSet(this.handleActiveSet.bind(this));
-
-    this.service
-      .getCharacteristic(Characteristic.CurrentHeaterCoolerState)
-      .onGet(this.handleCurrentHeaterCoolerStateGet.bind(this));
-
+    // Restrict to only HEAT + AUTO (no COOL)
     this.service
       .getCharacteristic(Characteristic.TargetHeaterCoolerState)
-      .onGet(this.handleTargetHeaterCoolerStateGet.bind(this))
-      .onSet(this.handleTargetHeaterCoolerStateSet.bind(this));
+      .setProps({
+        validValues: [
+          Characteristic.TargetHeaterCoolerState.HEAT,
+          Characteristic.TargetHeaterCoolerState.AUTO,
+        ],
+      });
 
+    // --- Characteristic Handlers ---
+
+    // Current heater state (off/on)
+    this.service
+      .getCharacteristic(Characteristic.Active)
+      .onGet(this.handleGetActive.bind(this))
+      .onSet(this.handleSetActive.bind(this));
+
+    // Target state (ON = HEAT, SCHEDULED = AUTO)
+    this.service
+      .getCharacteristic(Characteristic.TargetHeaterCoolerState)
+      .onGet(this.handleGetTargetState.bind(this))
+      .onSet(this.handleSetTargetState.bind(this));
+
+    // Current temperature
     this.service
       .getCharacteristic(Characteristic.CurrentTemperature)
-      .onGet(this.handleCurrentTemperatureGet.bind(this));
+      .onGet(this.handleGetCurrentTemperature.bind(this));
 
+    // Target temperature
     this.service
       .getCharacteristic(Characteristic.HeatingThresholdTemperature)
-      .onGet(this.handleHeatingThresholdTemperatureGet.bind(this))
-      .onSet(this.hadleHeatingThresholdTemperatureSet.bind(this));
-      // 🔁 Periodically refresh the device state and update HomeKit
-      setInterval(async () => {
-  try {
-    await this.device.update();
+      .onGet(this.handleGetTargetTemperature.bind(this))
+      .onSet(this.handleSetTargetTemperature.bind(this));
 
-    this.service.updateCharacteristic(
-      this.platform.Characteristic.Active,
-      this.device.On,
-    );
+    // Set supported temperature range
+    this.service
+      .getCharacteristic(Characteristic.HeatingThresholdTemperature)
+      .setProps({
+        minValue: 5,
+        maxValue: 35,
+        minStep: 0.5,
+      });
 
-    this.service.updateCharacteristic(
-      this.platform.Characteristic.CurrentHeaterCoolerState,
-      this.device.isHeating
-        ? this.platform.Characteristic.CurrentHeaterCoolerState.HEATING
-        : this.platform.Characteristic.CurrentHeaterCoolerState.INACTIVE,
-    );
-
-    this.service.updateCharacteristic(
-      this.platform.Characteristic.CurrentTemperature,
-      this.device.CurrentTemperature,
-    );
-    this.service.updateCharacteristic(
-        this.platform.Characteristic.HeatingThresholdTemperature,
-        this.device.TargetTemperature,
-        );
-    } catch (err) {
-        this.platform.log.error(`Polling failed for ${this.device.Name}:`, err);
-        }
-    }, 30 * 1000); // every 30 seconds
-      
+    // Periodically update
+    setInterval(() => this.updateFromDevice(), 30000);
   }
 
-async handleActiveGet(): Promise<CharacteristicValue> {
-  const isActive =
-    this.device.Mode === 'Control individually'
-      ? this.platform.Characteristic.Active.ACTIVE
-      : this.platform.Characteristic.Active.INACTIVE;
+  //
+  // 🔥 Characteristic handlers
+  //
 
-  this.platform.log.debug('Get Characteristic Active ->', isActive);
-  return isActive;
-}
+  async handleGetActive(): Promise<CharacteristicValue> {
+    const active = this.device.Mode !== 'OFF';
+    this.platform.log.debug(`[${this.device.Name}] GET Active = ${active}`);
+    return active ? 1 : 0; // 1 = Active, 0 = Inactive
+  }
 
-async handleActiveSet(value: CharacteristicValue) {
-  const isTurningOn =
-    value === this.platform.Characteristic.Active.ACTIVE;
+  async handleSetActive(value: CharacteristicValue) {
+    const isOn = value === 1;
+    const newMode = isOn ? 'ON' : 'SCHEDULED';
+    this.platform.log.debug(`[${this.device.Name}] SET Active → ${newMode}`);
+    await this.device.setMode(newMode);
+  }
 
-  const newMode = isTurningOn ? 'Control individually' : 'Schedule';
-  await this.device.setMode(newMode);
+  async handleGetTargetState(): Promise<CharacteristicValue> {
+    const { Characteristic } = this.platform;
 
-  this.platform.log.debug('Set Characteristic Active ->', newMode);
-}
+    switch (this.device.Mode) {
+      case 'ON':
+        return Characteristic.TargetHeaterCoolerState.HEAT;
+      case 'SCHEDULED':
+        return Characteristic.TargetHeaterCoolerState.AUTO;
+      case 'OFF':
+      default:
+        // Off is represented by Active = 0, so just mirror that.
+        return Characteristic.TargetHeaterCoolerState.HEAT;
+    }
+  }
 
-  async handleCurrentHeaterCoolerStateGet(): Promise<CharacteristicValue> {
-    await this.device.update();
+  async handleSetTargetState(value: CharacteristicValue) {
+    const { Characteristic } = this.platform;
+    let newMode: 'ON' | 'SCHEDULED' | 'OFF';
 
-    const isHeating = this.device.isHeating;
-
-    const State = {
-      INACTIVE: this.platform.Characteristic.CurrentHeaterCoolerState.INACTIVE,
-      IDLE: this.platform.Characteristic.CurrentHeaterCoolerState.IDLE,
-      HEATING: this.platform.Characteristic.CurrentHeaterCoolerState.HEATING,
-    };
-
-    let currentState = State.IDLE;
-
-    if (isHeating) {
-      currentState = State.HEATING;
+    switch (value) {
+      case Characteristic.TargetHeaterCoolerState.HEAT:
+        newMode = 'ON';
+        break;
+      case Characteristic.TargetHeaterCoolerState.AUTO:
+        newMode = 'SCHEDULED';
+        break;
+      default:
+        newMode = 'OFF';
     }
 
-    this.platform.log.debug(
-      'Get Characteristic HeaterCoolerState ->',
-      currentState,
-    );
-
-    return currentState;
+    this.platform.log.debug(`[${this.device.Name}] SET TargetState → ${newMode}`);
+    await this.device.setMode(newMode);
   }
 
-async handleTargetHeaterCoolerStateGet(): Promise<CharacteristicValue> {
-  const { TargetHeaterCoolerState } = this.platform.Characteristic;
-
-  // Map device mode to HomeKit state
-  switch (this.device.Mode) {
-    case 'Control individually':
-      return TargetHeaterCoolerState.HEAT;
-    case 'Schedule':
-      return TargetHeaterCoolerState.AUTO;
-    case 'OFF':
-    default:
-      return TargetHeaterCoolerState.OFF;
-  }
-}
-
-async handleTargetHeaterCoolerStateSet(value: CharacteristicValue) {
-  const { TargetHeaterCoolerState } = this.platform.Characteristic;
-  let newMode: 'Control individually' | 'Schedule' | 'OFF' = 'OFF';
-
-  switch (value) {
-    case TargetHeaterCoolerState.HEAT:
-      newMode = 'Control individually';
-      break;
-    case TargetHeaterCoolerState.AUTO:
-      newMode = 'Schedule';
-      break;
-    case TargetHeaterCoolerState.OFF:
-      newMode = 'OFF';
-      break;
+  async handleGetCurrentTemperature(): Promise<CharacteristicValue> {
+    this.platform.log.debug(`[${this.device.Name}] GET CurrentTemperature = ${this.device.Temperature}`);
+    return this.device.Temperature;
   }
 
-  this.platform.log.debug(`Changing mode -> ${newMode}`);
-  await this.device.setMode(newMode);
-
-  // Update the Active characteristic to reflect ON/OFF properly
-  this.service.updateCharacteristic(
-    this.platform.Characteristic.Active,
-    newMode === 'Control individually'
-      ? this.platform.Characteristic.Active.ACTIVE
-      : this.platform.Characteristic.Active.INACTIVE,
-  );
-}
-
-  async handleCurrentTemperatureGet(): Promise<CharacteristicValue> {
-    await this.device.update();
-
-    const currentTemp = this.device.CurrentTemperature;
-
-    this.platform.log.debug(`getting CurrentTemperature ${currentTemp}`);
-
-    return currentTemp;
+  async handleGetTargetTemperature(): Promise<CharacteristicValue> {
+    this.platform.log.debug(`[${this.device.Name}] GET TargetTemperature = ${this.device.TargetTemperature}`);
+    return this.device.TargetTemperature;
   }
 
-  async handleHeatingThresholdTemperatureGet(): Promise<CharacteristicValue> {
-    await this.device.update();
-
-    const targetTemp = this.device.TargetTemperature;
-
-    this.platform.log.debug(
-      'Get Characteristic ThresholdTemperature ->',
-      targetTemp,
-    );
-
-    return targetTemp;
+  async handleSetTargetTemperature(value: CharacteristicValue) {
+    const temp = value as number;
+    this.platform.log.debug(`[${this.device.Name}] SET TargetTemperature → ${temp}`);
+    await this.device.setTargetTemperature(temp);
   }
 
-  async hadleHeatingThresholdTemperatureSet(value: CharacteristicValue) {
-    this.device.setTargetTemperature(value as number);
+  //
+  // 🔁 Periodic sync from device
+  //
+  private async updateFromDevice() {
+    try {
+      await this.device.update();
 
-    this.platform.log.debug(
-      'Set Characteristic ThresholdTemperature ->',
-      value,
-    );
+      const { Characteristic } = this.platform;
+
+      // Update Active status
+      this.service.updateCharacteristic(
+        Characteristic.Active,
+        this.device.Mode !== 'OFF' ? 1 : 0,
+      );
+
+      // Update Target State
+      const newState =
+        this.device.Mode === 'SCHEDULED'
+          ? Characteristic.TargetHeaterCoolerState.AUTO
+          : Characteristic.TargetHeaterCoolerState.HEAT;
+
+      this.service.updateCharacteristic(
+        Characteristic.TargetHeaterCoolerState,
+        newState,
+      );
+
+      // Update Temperatures
+      this.service.updateCharacteristic(
+        Characteristic.CurrentTemperature,
+        this.device.Temperature,
+      );
+
+      this.service.updateCharacteristic(
+        Characteristic.HeatingThresholdTemperature,
+        this.device.TargetTemperature,
+      );
+    } catch (err) {
+      this.platform.log.warn(
+        `[${this.device.Name}] Failed to update device: ${(err as Error).message}`,
+      );
+    }
   }
 }
