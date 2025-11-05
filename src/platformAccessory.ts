@@ -32,7 +32,7 @@ export class MillLocalPlatformAccessory {
       .setProps({
         validValues: [
           Characteristic.TargetHeaterCoolerState.HEAT,
-     //     Characteristic.TargetHeaterCoolerState.AUTO,
+          Characteristic.TargetHeaterCoolerState.AUTO,
         ],
       });
 
@@ -68,6 +68,15 @@ this.modeSwitchService =
     'Manual Mode',       // name in HomeKit
     'manual-mode-switch' // unique subtype
   );
+  
+  this.accessory.services.forEach(service => {
+  if (
+    service.displayName === 'Manual Mode' &&
+    service.subtype !== 'manual-mode-switch'
+  ) {
+    this.accessory.removeService(service);
+  }
+});
 
 this.modeSwitchService
   .getCharacteristic(Characteristic.On)
