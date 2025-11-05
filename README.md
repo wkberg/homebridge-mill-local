@@ -48,3 +48,21 @@ Add the accessory to your Homebridge `config.json`:
 
 The following feature still needs improvement:
 - Switching between **manual mode** (ON) and **scheduled mode** (AUTO / weekly program) 
+
+
+
+
+<!--
+How to use during development:
+
+1. On Homebridge terminal:
+   cd /home/homebridge/homebridge-mill-local
+
+2. Pull the latest changes:
+   git pull
+
+3. SSH on the server and build the plugin:
+   sudo npm run build
+   
+4. Restart homebridge
+-->
