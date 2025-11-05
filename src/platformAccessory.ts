@@ -87,13 +87,24 @@ export class MillLocalPlatformAccessory {
 
   // --- HeaterCooler handlers ---
   async handleGetActive(): Promise<CharacteristicValue> {
-    return this.device.Mode !== 'OFF' ? 1 : 0;
-  }
+  // Active = 1 if the device is ON or in SCHEDULED mode
+  const active = this.device.Mode !== 'OFF';
+  return active ? 1 : 0;
+}
 
   async handleSetActive(value: CharacteristicValue) {
-    const newMode = value === 1 ? 'ON' : 'OFF';
-    await this.device.setMode(newMode);
+  const isActive = value === 1;
+
+  // Only set OFF if turning completely off
+  if (!isActive) {
+    await this.device.setMode('OFF');
+    this.platform.log.debug(`[${this.device.Name}] SET Active → OFF`);
+  } else {
+    // Do nothing: turning Active on should not force SCHEDULED
+    // The user changes modes via TargetState instead
+    this.platform.log.debug(`[${this.device.Name}] Active turned ON — keep current mode`);
   }
+}
 
   async handleGetTargetState(): Promise<CharacteristicValue> {
     const { Characteristic } = this.platform;
