@@ -80,7 +80,7 @@ export class MillLocalPlatform implements DynamicPlatformPlugin {
           existingAccessory.displayName,
         );
 
-        new MillPlatformAccessory(this, existingAccessory, device);
+        new MillLocalPlatformAccessory(this, existingAccessory, device);
         // it is possible to remove platform accessories at any time using `api.unregisterPlatformAccessories`, eg.:
         // remove platform accessories when no longer present
         // this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [existingAccessory]);
@@ -97,7 +97,7 @@ export class MillLocalPlatform implements DynamicPlatformPlugin {
 
         // create the accessory handler for the newly create accessory
         // this is imported from `platformAccessory.ts`
-        new MillPlatformAccessory(this, accessory, device);
+        new MillLocalPlatformAccessory(this, accessory, device);
 
         // link the accessory to your platform
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [
