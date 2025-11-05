@@ -3,7 +3,7 @@
 **Mill Local Connection** allows you to control your Mill heaters directly via Homebridge, using your local network connection. This plugin supports:
 
 - Turning the heater **ON** or **OFF**  
-- Switching between **manual mode** (ON) and **scheduled mode** (AUTO / weekly program)  
+ 
 - Adjusting the **target temperature**  
 - Real-time updates of **current temperature** and **heater state**
 
@@ -13,7 +13,6 @@
 
 - **Direct local control** without cloud dependency  
 - **HomeKit integration** with proper Active / Target HeaterCoolerState reporting  
-- Scheduled mode remains active without being flipped OFF automatically  
 
 ## Installation
 
@@ -46,3 +45,6 @@ Add the accessory to your Homebridge `config.json`:
 ## Known Issues / Limitations
 
 - The HomeKit UI may appear blank or show limited controls when in scheduled (AUTO) mode  
+
+The following feature still needs improvement:
+- Switching between **manual mode** (ON) and **scheduled mode** (AUTO / weekly program) 
