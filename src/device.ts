@@ -16,7 +16,7 @@ export interface IDevice {
 }
 
 const INDIVIDUAL_MODE = 'Control individually';
-const SCHEDULED_MODE = 'Weekly program';
+const SCHEDULED_MODE = 'weekly_program';
 const OFF_MODE = 'off';
 
 export default class MillDevice implements IDevice {
