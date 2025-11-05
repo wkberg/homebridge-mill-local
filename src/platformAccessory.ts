@@ -126,8 +126,8 @@ export class MillLocalPlatformAccessory {
   }
 
   async handleGetCurrentTemperature(): Promise<CharacteristicValue> {
-    this.platform.log.debug(`[${this.device.Name}] GET CurrentTemperature = ${this.device.Temperature}`);
-    return this.device.Temperature;
+    this.platform.log.debug(`[${this.device.Name}] GET CurrentTemperature = ${this.device.CurrentTemperature}`);
+    return this.device.CurrentTemperature;
   }
 
   async handleGetTargetTemperature(): Promise<CharacteristicValue> {
@@ -170,7 +170,7 @@ export class MillLocalPlatformAccessory {
       // Update Temperatures
       this.service.updateCharacteristic(
         Characteristic.CurrentTemperature,
-        this.device.Temperature,
+        this.device.CurrentTemperature,
       );
 
       this.service.updateCharacteristic(
