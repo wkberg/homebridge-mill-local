@@ -1,5 +1,4 @@
 import { Logger } from 'homebridge';
-import fetch from 'whatwg-fetch';
 
 export interface IDevice {
   ID: string;
