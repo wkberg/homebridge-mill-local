@@ -86,43 +86,43 @@ export class MillLocalPlatformAccessory {
 
 async handleSetActive(value: CharacteristicValue) {
   const isOn = value === 1;
-  const newMode = isOn ? 'Control individually' : 'Weekly program';
-  this.platform.log.debug(`[${this.device.Name}] SET Active → ${newMode}`);
-  await this.device.setMode(newMode);
+  const newMode: 'ON' | 'SCHEDULED' | 'OFF' = isOn ? 'ON' : 'SCHEDULED';
+this.platform.log.debug(`[${this.device.Name}] SET Active → ${newMode}`);
+await this.device.setMode(newMode);
 }
 
 async handleGetTargetState(): Promise<CharacteristicValue> {
   const { Characteristic } = this.platform;
 
-  switch (this.device.Mode) {
-    case 'Control individually':
-      return Characteristic.TargetHeaterCoolerState.HEAT;
-    case 'Weekly program':
-      return Characteristic.TargetHeaterCoolerState.AUTO;
-    case 'OFF':
-    default:
-      return Characteristic.TargetHeaterCoolerState.OFF;
-  }
+switch (this.device.Mode) {
+  case 'ON':
+    return Characteristic.TargetHeaterCoolerState.HEAT;
+  case 'SCHEDULED':
+    return Characteristic.TargetHeaterCoolerState.AUTO;
+  case 'OFF':
+  default:
+    return Characteristic.TargetHeaterCoolerState.HEAT; // fallback
+}
 }
 
 async handleSetTargetState(value: CharacteristicValue) {
   const { Characteristic } = this.platform;
-  let newMode: 'Control individually' | 'Weekly program' | 'OFF';
+  let newMode: 'ON' | 'SCHEDULED' | 'OFF';
 
-  switch (value) {
-    case Characteristic.TargetHeaterCoolerState.HEAT:
-      newMode = 'Control individually';
-      break;
-    case Characteristic.TargetHeaterCoolerState.AUTO:
-      newMode = 'Weekly program';
-      break;
-    default:
-      newMode = 'OFF';
-  }
-
-  this.platform.log.debug(`[${this.device.Name}] SET TargetState → ${newMode}`);
-  await this.device.setMode(newMode);
+switch (value) {
+  case Characteristic.TargetHeaterCoolerState.HEAT:
+    newMode = 'ON';
+    break;
+  case Characteristic.TargetHeaterCoolerState.AUTO:
+    newMode = 'SCHEDULED';
+    break;
+  default:
+    newMode = 'OFF';
+    break;
 }
+
+this.platform.log.debug(`[${this.device.Name}] SET TargetState → ${newMode}`);
+await this.device.setMode(newMode);
 
   async handleGetCurrentTemperature(): Promise<CharacteristicValue> {
     this.platform.log.debug(`[${this.device.Name}] GET CurrentTemperature = ${this.device.CurrentTemperature}`);
@@ -155,17 +155,16 @@ private async updateFromDevice() {
     );
 
     // Update Target State based on Mill mode
-    let newState = Characteristic.TargetHeaterCoolerState.OFF;
-    if (this.device.Mode === 'Control individually') {
-      newState = Characteristic.TargetHeaterCoolerState.HEAT;
-    } else if (this.device.Mode === 'Weekly program') {
-      newState = Characteristic.TargetHeaterCoolerState.AUTO;
-    }
-
-    this.service.updateCharacteristic(
-      Characteristic.TargetHeaterCoolerState,
-      newState,
-    );
+ let newState = Characteristic.TargetHeaterCoolerState.HEAT; // default
+if (this.device.Mode === 'ON') {
+  newState = Characteristic.TargetHeaterCoolerState.HEAT;
+} else if (this.device.Mode === 'SCHEDULED') {
+  newState = Characteristic.TargetHeaterCoolerState.AUTO;
+}
+this.service.updateCharacteristic(
+  Characteristic.TargetHeaterCoolerState,
+  newState,
+);
 
     // Update Temperatures
     this.service.updateCharacteristic(

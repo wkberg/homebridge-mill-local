@@ -196,6 +196,18 @@ export default class MillDevice implements IDevice {
   }
 }
 
+get Mode(): 'ON' | 'SCHEDULED' | 'OFF' {
+  switch (this._mode) {
+    case INDIVIDUAL_MODE: // "Control individually"
+      return 'ON';
+    case SCHEDULED_MODE: // "Weekly program"
+      return 'SCHEDULED';
+    case OFF_MODE:       // "OFF"
+    default:
+      return 'OFF';
+  }
+}
+
 /** Response types */
 type SimpleResponse = {
   status: string;
